@@ -1,0 +1,72 @@
+services:
+  web:
+    build:
+      context: . #path to the root project folder
+      dockerfile: ./docker/Dockerfile
+    volumes:
+      - ./django_online-shop:/usr/src/app/
+    ports:
+      - "8000:8000" # sets the port that maps to internal port in docker container
+    entrypoint: /bin/bash /entrypoint.sh
+    environment:
+      - DEBUG=1
+      - SECRET_KEY=django-insecure-z*c82&$49%9)%p!zaj9bk%opq#a8!c74b_oena0xf_b6zkuwbc
+      - DJANGO_ALLOWED_HOSTS=localhost 127.0.0.1 [::1]
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - REDIS_HOST=redis
+      - POSTGRES_NAME=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=database
+    depends_on:
+      - database
+      - redis
+
+
+  celery:
+    build:
+      context: . #path to the root project folder
+      dockerfile: ./docker/Dockerfile
+    command: celery -A onlineshop worker -l info # Command used to start the Celery worker in the Docker container
+    volumes:
+      - ./django_online-shop:/usr/src/app
+    environment:
+      - CELERY_BROKER=redis://redis:6379/1
+      - CELERY_BACKEND=redis://redis:6379/1
+      # depends on show that celery worker service requires the web service and the redis service to run
+    depends_on:
+      - web
+      - redis
+
+  celery-beat:
+    build:
+      context: . #path to the root project folder
+      dockerfile: ./docker/Dockerfile
+    command: celery -A onlineshop beat -l info
+    volumes:
+      - ./django_online-shop:/usr/src/app
+    environment:
+      - CELERY_BROKER=redis://redis:6379/1
+      - CELERY_BACKEND=redis://redis:6379/1
+    depends_on:
+      - web
+      - redis
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  database:
+    image: postgres:latest
+    restart: always
+    volumes:
+      - ./dump.sql:/docker-entrypoint-initdb.d/dump.sql
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST: database
+    ports:
+      - "5432:5432"
